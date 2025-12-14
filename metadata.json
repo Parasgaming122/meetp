@@ -1,0 +1,8 @@
+{
+  "name": "GeminiClass",
+  "description": "An AI-powered immersive online classroom experience where you learn directly from an advanced AI tutor.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
