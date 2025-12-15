@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Video, VideoOff, Settings, Sparkles, Video as VideoIcon, Keyboard, Copy, Check } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Settings, Sparkles, Video as VideoIcon, Keyboard, Copy, Check, Key } from 'lucide-react';
 import { generateRoomId } from '../utils/roomUtils';
 
 interface LobbyProps {
-  onJoin: (name: string, roomId: string, isAdmin: boolean, aiEnabled: boolean) => void;
+  onJoin: (name: string, roomId: string, isAdmin: boolean, aiEnabled: boolean, apiKey?: string) => void;
+  needsApiKey: boolean;
+  savedApiKey?: string;
 }
 
-export const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
+export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }) => {
   const [name, setName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [mode, setMode] = useState<'start' | 'join'>('start'); // 'start' = new meeting, 'join' = enter code
   const [generatedRoomId, setGeneratedRoomId] = useState('');
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [apiKeyInput, setApiKeyInput] = useState(savedApiKey || '');
   
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -57,12 +60,15 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
       setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleStartMeeting = () => {
-      if (name) onJoin(name, generatedRoomId, true, aiEnabled);
-  };
+  const validateAndJoin = (id: string, admin: boolean) => {
+      if (!name) return;
+      
+      if (needsApiKey && !apiKeyInput.trim()) {
+          alert("Please enter a Google Gemini API Key to continue.");
+          return;
+      }
 
-  const handleJoinMeeting = () => {
-      if (name && roomId) onJoin(name, roomId, false, true); // Joiners inherit room settings typically, defaulting to true for now
+      onJoin(name, id, admin, aiEnabled, apiKeyInput);
   };
 
   return (
@@ -90,6 +96,23 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
                         className="w-full bg-[#3c4043] border border-transparent focus:border-[#8ab4f8] rounded-lg px-4 py-3 text-white text-lg placeholder-gray-500 outline-none transition-all shadow-sm"
                     />
                  </div>
+
+                 {/* API Key Input (Only if needed) */}
+                 {needsApiKey && (
+                     <div className="space-y-2 animate-fadeIn">
+                        <label className="text-sm font-medium text-gray-300 ml-1 flex justify-between items-center">
+                            <span className="flex items-center gap-1"><Key size={14} /> Gemini API Key</span>
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-[#8ab4f8] hover:underline">Get Key</a>
+                        </label>
+                        <input 
+                            type="password" 
+                            placeholder="Enter Gemini API Key" 
+                            value={apiKeyInput}
+                            onChange={(e) => setApiKeyInput(e.target.value)}
+                            className="w-full bg-[#3c4043] border border-transparent focus:border-[#8ab4f8] rounded-lg px-4 py-3 text-white text-lg placeholder-gray-500 outline-none transition-all shadow-sm font-mono tracking-wider"
+                        />
+                     </div>
+                 )}
 
                  {/* Mode Tabs */}
                  <div className="flex p-1 bg-[#303134] rounded-lg">
@@ -135,8 +158,8 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
                              </label>
 
                              <button 
-                                onClick={handleStartMeeting}
-                                disabled={!name}
+                                onClick={() => validateAndJoin(generatedRoomId, true)}
+                                disabled={!name || (needsApiKey && !apiKeyInput)}
                                 className="w-full bg-[#8ab4f8] text-[#202124] hover:bg-[#aecbfa] disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors text-lg"
                              >
                                 <VideoIcon size={20} />
@@ -156,8 +179,8 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin }) => {
                                 />
                             </div>
                             <button 
-                                onClick={handleJoinMeeting}
-                                disabled={!name || !roomId}
+                                onClick={() => validateAndJoin(roomId, false)}
+                                disabled={!name || !roomId || (needsApiKey && !apiKeyInput)}
                                 className="w-full bg-[#8ab4f8] text-[#202124] hover:bg-[#aecbfa] disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 rounded-lg transition-colors text-lg"
                             >
                                 Join Now

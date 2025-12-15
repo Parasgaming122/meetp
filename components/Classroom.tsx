@@ -47,35 +47,39 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
   // Initialize Service Instance
   useEffect(() => {
     initializeStream();
-    serviceRef.current = new GeminiLiveService(apiKey);
     
-    const service = serviceRef.current;
-    service.setCallbacks(
-        () => {}, 
-        (text, isUser, isFinal) => {
-            if (text.trim().length === 0) return;
-            setMessages(prev => {
-                const lastMsg = prev[prev.length - 1];
-                if (lastMsg && lastMsg.sender === (isUser ? 'user' : 'ai') && !isFinal && !lastMsg.isPrivate) {
-                     return [...prev.slice(0, -1), { ...lastMsg, text: text }];
-                }
-                return [...prev, {
-                    id: Date.now().toString(),
-                    sender: isUser ? 'user' : 'ai',
-                    text: text,
-                    timestamp: new Date(),
-                    isPrivate: false
-                }];
-            });
-        },
-        (status) => setConnectionState(status),
-        (vol) => {
-            setParticipants(prev => prev.map(p => p.role === 'ai' ? { ...p, audioLevel: vol } : p));
-        }
-    );
+    // Only initialize Gemini service if we have a key
+    if (apiKey) {
+        serviceRef.current = new GeminiLiveService(apiKey);
+        
+        const service = serviceRef.current;
+        service.setCallbacks(
+            () => {}, 
+            (text, isUser, isFinal) => {
+                if (text.trim().length === 0) return;
+                setMessages(prev => {
+                    const lastMsg = prev[prev.length - 1];
+                    if (lastMsg && lastMsg.sender === (isUser ? 'user' : 'ai') && !isFinal && !lastMsg.isPrivate) {
+                        return [...prev.slice(0, -1), { ...lastMsg, text: text }];
+                    }
+                    return [...prev, {
+                        id: Date.now().toString(),
+                        sender: isUser ? 'user' : 'ai',
+                        text: text,
+                        timestamp: new Date(),
+                        isPrivate: false
+                    }];
+                });
+            },
+            (status) => setConnectionState(status),
+            (vol) => {
+                setParticipants(prev => prev.map(p => p.role === 'ai' ? { ...p, audioLevel: vol } : p));
+            }
+        );
+    }
 
     return () => {
-      service.disconnect();
+      serviceRef.current?.disconnect();
       if (videoCaptureInterval.current) window.clearInterval(videoCaptureInterval.current);
       if (captureVideoRef.current) captureVideoRef.current.srcObject = null;
       if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach(t => t.stop());
@@ -85,15 +89,21 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
   // Handle AI Activation/Deactivation
   useEffect(() => {
       const service = serviceRef.current;
-      if (!service) return;
-
-      if (isAIActive) {
-          service.connect();
-          const ai = new GoogleGenAI({ apiKey });
-          privateChatRef.current = ai.chats.create({
-              model: 'gemini-2.5-flash',
-              config: { systemInstruction: "You are the private teaching assistant version of the professor. Answer concisely." }
-          });
+      
+      if (isAIActive && apiKey) {
+          service?.connect();
+          
+          if (!privateChatRef.current) {
+              try {
+                  const ai = new GoogleGenAI({ apiKey });
+                  privateChatRef.current = ai.chats.create({
+                      model: 'gemini-2.5-flash',
+                      config: { systemInstruction: "You are the private teaching assistant version of the professor. Answer concisely." }
+                  });
+              } catch (e) {
+                  console.error("Failed to create private chat", e);
+              }
+          }
 
           setParticipants(prev => {
               if (!prev.some(p => p.role === 'ai')) {
@@ -110,7 +120,7 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
               return prev;
           });
       } else {
-          service.disconnect();
+          service?.disconnect();
           privateChatRef.current = null;
           setParticipants(prev => prev.filter(p => p.role !== 'ai'));
           setConnectionState(ConnectionState.DISCONNECTED);
@@ -179,8 +189,8 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
 
   // Video Capture Logic
   useEffect(() => {
-    if (connectionState === ConnectionState.CONNECTED && isAIActive) {
-       if (stream) serviceRef.current?.startAudioStream(stream);
+    if (connectionState === ConnectionState.CONNECTED && isAIActive && serviceRef.current) {
+       if (stream) serviceRef.current.startAudioStream(stream);
        
        if (activeTool === ActiveTool.SCREEN_SHARE && screenStreamRef.current) {
            startVideoCapture(screenStreamRef.current);

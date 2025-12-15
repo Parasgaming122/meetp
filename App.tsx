@@ -9,13 +9,17 @@ const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAIEnabled, setIsAIEnabled] = useState(true);
   
-  const apiKey = process.env.API_KEY || ''; 
+  // Handle API key from env or user input
+  const envApiKey = process.env.API_KEY || '';
+  const [userApiKey, setUserApiKey] = useState('');
+  const activeApiKey = envApiKey || userApiKey;
 
-  const handleJoin = (name: string, id: string, admin: boolean, aiEnabled: boolean) => {
+  const handleJoin = (name: string, id: string, admin: boolean, aiEnabled: boolean, apiKey?: string) => {
     setUserName(name);
     setRoomId(id);
     setIsAdmin(admin);
     setIsAIEnabled(aiEnabled);
+    if (apiKey) setUserApiKey(apiKey);
     setInCall(true);
   };
 
@@ -27,24 +31,17 @@ const App: React.FC = () => {
     setIsAIEnabled(true);
   };
 
-  if (!apiKey) {
-      return (
-          <div className="h-screen flex items-center justify-center bg-[#202124] text-white">
-              <div className="text-center p-8 border border-red-500 rounded-lg max-w-md bg-[#303134]">
-                  <h2 className="text-xl font-bold mb-2 text-red-400">Configuration Error</h2>
-                  <p className="text-gray-300">API_KEY environment variable is missing.</p>
-              </div>
-          </div>
-      );
-  }
-
   return (
     <div className="antialiased h-full">
       {!inCall ? (
-        <Lobby onJoin={handleJoin} />
+        <Lobby 
+            onJoin={handleJoin} 
+            needsApiKey={!envApiKey} 
+            savedApiKey={userApiKey}
+        />
       ) : (
         <Classroom 
-            apiKey={apiKey} 
+            apiKey={activeApiKey} 
             userName={userName}
             roomId={roomId}
             isAdmin={isAdmin} 
