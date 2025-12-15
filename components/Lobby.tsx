@@ -6,11 +6,12 @@ interface LobbyProps {
   onJoin: (name: string, roomId: string, isAdmin: boolean, aiEnabled: boolean, apiKey?: string) => void;
   needsApiKey: boolean;
   savedApiKey?: string;
+  initialRoomId?: string;
 }
 
-export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }) => {
+export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey, initialRoomId }) => {
   const [name, setName] = useState('');
-  const [roomId, setRoomId] = useState('');
+  const [roomId, setRoomId] = useState(initialRoomId || '');
   const [mode, setMode] = useState<'start' | 'join'>('start'); // 'start' = new meeting, 'join' = enter code
   const [generatedRoomId, setGeneratedRoomId] = useState('');
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -26,6 +27,14 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
     // Generate a code on mount if user wants to start a meeting
     setGeneratedRoomId(generateRoomId());
   }, []);
+
+  // Handle Initial Room ID
+  useEffect(() => {
+    if (initialRoomId) {
+        setMode('join');
+        setRoomId(initialRoomId);
+    }
+  }, [initialRoomId]);
 
   // Auto-disable AI if key is needed but not present
   useEffect(() => {
@@ -72,10 +81,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
   const validateAndJoin = (id: string, admin: boolean) => {
       if (!name) return;
       
-      // If we need a key, and user provided one, use it. 
-      // If empty, we proceed but AI will be disabled via the aiEnabled flag logic (or just missing key downstream).
       const finalAiEnabled = needsApiKey && !apiKeyInput.trim() ? false : aiEnabled;
-
       onJoin(name, id, admin, finalAiEnabled, apiKeyInput);
   };
 

@@ -9,6 +9,7 @@ import { SettingsModal } from './SettingsModal';
 import { ChatMessage, ConnectionState, ActiveTool, Participant, LayoutMode } from '../types';
 import { GoogleGenAI, Chat } from "@google/genai";
 import { Maximize2, Minimize2, Grid, Layout } from 'lucide-react';
+import Peer from 'peerjs';
 
 interface ClassroomProps {
   apiKey: string;
@@ -27,7 +28,6 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
   const [activeTool, setActiveTool] = useState<ActiveTool>(ActiveTool.NONE);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  // Force AI to false if no key is available
   const [isAIActive, setIsAIActive] = useState(initialAIEnabled && !!apiKey);
   const [isRecording, setIsRecording] = useState(false);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(LayoutMode.GALLERY);
@@ -44,12 +44,94 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const peerRef = useRef<Peer | null>(null);
 
-  // Initialize Service Instance
+  // Initialize Media Stream
   useEffect(() => {
     initializeStream();
-    
-    // Only initialize Gemini service if we have a key
+    return () => {
+       if (videoCaptureInterval.current) window.clearInterval(videoCaptureInterval.current);
+       if (captureVideoRef.current) captureVideoRef.current.srcObject = null;
+       if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach(t => t.stop());
+       serviceRef.current?.disconnect();
+       peerRef.current?.destroy();
+    };
+  }, [initializeStream]);
+
+  // PeerJS Connection Logic
+  useEffect(() => {
+    if (!stream) return;
+
+    // Destroy existing peer if any
+    if (peerRef.current) peerRef.current.destroy();
+
+    // Determine Peer ID: Host gets predictable ID, Guest gets random
+    const hostPeerId = `gemini-class-host-${roomId}`;
+    const myPeerId = isAdmin ? hostPeerId : undefined; 
+
+    const peer = new Peer(myPeerId as string);
+    peerRef.current = peer;
+
+    peer.on('open', (id) => {
+        console.log('My Peer ID:', id);
+        
+        // If Guest, connect to Host
+        if (!isAdmin) {
+             const call = peer.call(hostPeerId, stream, {
+                 metadata: { name: userName }
+             });
+             
+             call.on('stream', (hostStream) => {
+                 setParticipants(prev => {
+                     if (prev.find(p => p.id === hostPeerId)) return prev;
+                     return [...prev, {
+                         id: hostPeerId,
+                         name: 'Host', // Should optimally get from data connection
+                         role: 'host',
+                         isMuted: false,
+                         isCamOn: true,
+                         stream: hostStream,
+                         connectionQuality: 'good'
+                     }];
+                 });
+             });
+        }
+    });
+
+    // Handle Incoming Calls (Host Logic mostly, but Guest can receive if we implement mesh later)
+    peer.on('call', (call) => {
+        // Answer the call with our stream
+        call.answer(stream);
+        
+        const guestName = call.metadata?.name || 'Guest';
+        const guestId = call.peer;
+
+        call.on('stream', (remoteStream) => {
+             setParticipants(prev => {
+                 if (prev.find(p => p.id === guestId)) return prev;
+                 return [...prev, {
+                     id: guestId,
+                     name: guestName,
+                     role: 'participant',
+                     isMuted: false,
+                     isCamOn: true,
+                     stream: remoteStream,
+                     connectionQuality: 'good'
+                 }];
+             });
+        });
+    });
+
+    peer.on('error', (err) => {
+        console.warn("PeerJS error:", err);
+        // If host ID is taken, it implies host exists or collision.
+    });
+
+  }, [stream, isAdmin, roomId, userName]);
+
+
+  // Initialize Gemini Service Instance
+  useEffect(() => {
     if (apiKey) {
         serviceRef.current = new GeminiLiveService(apiKey);
         
@@ -78,14 +160,7 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
             }
         );
     }
-
-    return () => {
-      serviceRef.current?.disconnect();
-      if (videoCaptureInterval.current) window.clearInterval(videoCaptureInterval.current);
-      if (captureVideoRef.current) captureVideoRef.current.srcObject = null;
-      if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach(t => t.stop());
-    };
-  }, [apiKey, initializeStream]);
+  }, [apiKey]);
 
   // Handle AI Activation/Deactivation
   useEffect(() => {
@@ -124,51 +199,48 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
           service?.disconnect();
           privateChatRef.current = null;
           setParticipants(prev => prev.filter(p => p.role !== 'ai'));
-          setConnectionState(ConnectionState.DISCONNECTED);
+          // Keep connection state as connected if we have peers, otherwise disconnected
+          if (participants.length <= 1) setConnectionState(ConnectionState.DISCONNECTED);
       }
   }, [isAIActive, apiKey]);
 
-  // Initial Participants Setup
+  // Initial Participants Setup (Self)
   useEffect(() => {
-    const selfParticipant: Participant = {
-        id: 'self',
-        name: userName,
-        role: isAdmin ? 'host' : 'participant',
-        isMuted: !isAudioEnabled,
-        isCamOn: isVideoEnabled,
-        isSelf: true,
-        stream: stream,
-        permissions: { canDraw: isAdmin, canShareScreen: isAdmin },
-        connectionQuality: 'good'
-    };
-    
     setParticipants(prev => {
-        const existingAI = prev.find(p => p.role === 'ai');
-        const others = prev.filter(p => p.role !== 'ai' && !p.isSelf);
-        return existingAI ? [existingAI, ...others, selfParticipant] : [...others, selfParticipant];
+        // Remove old self if exists to avoid dupe or stale stream
+        const others = prev.filter(p => !p.isSelf);
+        const selfParticipant: Participant = {
+            id: 'self',
+            name: userName,
+            role: isAdmin ? 'host' : 'participant',
+            isMuted: !isAudioEnabled,
+            isCamOn: isVideoEnabled,
+            isSelf: true,
+            stream: stream,
+            permissions: { canDraw: isAdmin, canShareScreen: isAdmin },
+            connectionQuality: 'good'
+        };
+        // Ensure AI stays at top if exists
+        const ai = others.find(p => p.role === 'ai');
+        const realPeople = others.filter(p => p.role !== 'ai');
+        
+        return ai ? [ai, ...realPeople, selfParticipant] : [...realPeople, selfParticipant];
     });
-  }, [userName, isAdmin]); 
+  }, [userName, isAdmin, stream]); // Re-run when stream changes to update self view
 
-  // Update Self Participant
+  // Update Self Participant tracks when toggled
   useEffect(() => {
       setParticipants(prev => prev.map(p => {
           if (p.isSelf) {
-              let effectiveStream = stream;
-              if (activeTool === ActiveTool.SCREEN_SHARE && screenStreamRef.current) {
-                  const videoTrack = screenStreamRef.current.getVideoTracks()[0];
-                  const audioTracks = stream?.getAudioTracks() || [];
-                  if (videoTrack) effectiveStream = new MediaStream([videoTrack, ...audioTracks]);
-              }
               return { 
                   ...p, 
-                  stream: effectiveStream,
                   isMuted: !isAudioEnabled, 
                   isCamOn: isVideoEnabled,
               };
           }
           return p;
       }));
-  }, [stream, isAudioEnabled, isVideoEnabled, activeTool]);
+  }, [isAudioEnabled, isVideoEnabled]);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -188,7 +260,7 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleAudio, toggleVideo]);
 
-  // Video Capture Logic
+  // Video Capture Logic for AI
   useEffect(() => {
     if (connectionState === ConnectionState.CONNECTED && isAIActive && serviceRef.current) {
        if (stream) serviceRef.current.startAudioStream(stream);
@@ -255,6 +327,9 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
                   screenStreamRef.current = null;
               };
               setActiveTool(ActiveTool.SCREEN_SHARE);
+              
+              // If PeerJS connected, replace track (Advanced, handled by renegotiation usually, sticking to basic for now)
+              // Ideally replaceTrack() on peer connection senders. 
           } catch (e) {
               console.error("Screen share cancelled", e);
           }
@@ -280,7 +355,7 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
   const handleTogglePin = (id: string) => {
       setPinnedParticipantId(prev => (prev === id ? null : id));
       setParticipants(prev => prev.map(p => ({ ...p, isPinned: p.id === id ? !p.isPinned : false })));
-      if (pinnedParticipantId !== id) setLayoutMode(LayoutMode.SPEAKER); // Auto switch to speaker mode on pin
+      if (pinnedParticipantId !== id) setLayoutMode(LayoutMode.SPEAKER); 
   };
 
   const handleToggleFullscreen = (id: string) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lobby } from './components/Lobby';
 import { Classroom } from './components/Classroom';
 
@@ -13,6 +13,16 @@ const App: React.FC = () => {
   const envApiKey = process.env.API_KEY || '';
   const [userApiKey, setUserApiKey] = useState('');
   const activeApiKey = envApiKey || userApiKey;
+  
+  // URL Routing: Check for room ID in URL on mount
+  const [initialRoomId, setInitialRoomId] = useState('');
+
+  useEffect(() => {
+    const path = window.location.pathname.substring(1); // Remove leading slash
+    if (path && path.split('-').length >= 3) {
+      setInitialRoomId(path);
+    }
+  }, []);
 
   const handleJoin = (name: string, id: string, admin: boolean, aiEnabled: boolean, apiKey?: string) => {
     setUserName(name);
@@ -20,6 +30,10 @@ const App: React.FC = () => {
     setIsAdmin(admin);
     setIsAIEnabled(aiEnabled);
     if (apiKey) setUserApiKey(apiKey);
+    
+    // Update URL
+    window.history.pushState({}, '', `/${id}`);
+    
     setInCall(true);
   };
 
@@ -29,6 +43,9 @@ const App: React.FC = () => {
     setRoomId('');
     setIsAdmin(false);
     setIsAIEnabled(true);
+    
+    // Reset URL
+    window.history.pushState({}, '', '/');
   };
 
   return (
@@ -38,6 +55,7 @@ const App: React.FC = () => {
             onJoin={handleJoin} 
             needsApiKey={!envApiKey} 
             savedApiKey={userApiKey}
+            initialRoomId={initialRoomId}
         />
       ) : (
         <Classroom 
