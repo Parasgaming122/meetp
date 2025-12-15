@@ -2,8 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GeminiClass - AI Online Learning</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
+    <title>Classroom - Online Learning</title>
     <!-- Tailwind CDN is kept for simplicity, though PostCSS is available in the build -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -13,20 +13,25 @@
         background-color: #202124;
         color: white;
         overflow: hidden;
+        /* Prevent bounce on mobile */
+        overscroll-behavior-y: none;
       }
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
       }
-      ::-webkit-scrollbar-track {
-        background: #202124; 
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .no-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
       }
-      ::-webkit-scrollbar-thumb {
-        background: #3c4043; 
-        border-radius: 4px;
+      
+      /* Mobile safe area utilities */
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #5f6368; 
+      .pt-safe {
+        padding-top: env(safe-area-inset-top);
       }
     </style>
   <script type="importmap">
