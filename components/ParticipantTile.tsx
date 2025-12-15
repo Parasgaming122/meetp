@@ -1,26 +1,34 @@
-import React, { useEffect, useRef } from 'react';
-import { Mic, MicOff, LogOut, Shield, Sparkles, Video, VideoOff, Hand, Pin, PinOff } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, LogOut, Shield, Sparkles, Video, VideoOff, Hand, Pin, PinOff, Maximize2, Minimize2, MoreVertical, PenTool, Wifi } from 'lucide-react';
 import { Participant } from '../types';
 
 interface ParticipantTileProps {
   participant: Participant;
-  isAdminView?: boolean; // If true, enables admin controls on this tile
+  isAdminView?: boolean;
+  isFullscreen?: boolean;
   onToggleMuteParticipant?: (id: string) => void;
   onToggleCamParticipant?: (id: string) => void;
   onRemoveParticipant?: (id: string) => void;
   onTogglePin?: (id: string) => void;
+  onToggleFullscreen?: (id: string) => void;
+  onUpdatePermissions?: (id: string, permissions: Partial<Participant['permissions']>) => void;
 }
 
 export const ParticipantTile: React.FC<ParticipantTileProps> = ({
   participant,
   isAdminView,
+  isFullscreen,
   onToggleMuteParticipant,
   onToggleCamParticipant,
   onRemoveParticipant,
-  onTogglePin
+  onTogglePin,
+  onToggleFullscreen,
+  onUpdatePermissions
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { name, isSelf, stream, audioLevel = 0, isMuted, isCamOn, role, avatarColor, isHandRaised, isPinned, reaction } = participant;
+  const [showControls, setShowControls] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
+  const { name, isSelf, stream, audioLevel = 0, isMuted, isCamOn, role, avatarColor, isHandRaised, isPinned, reaction, permissions, connectionQuality } = participant;
   
   const isAi = role === 'ai';
 
@@ -30,17 +38,31 @@ export const ParticipantTile: React.FC<ParticipantTileProps> = ({
     }
   }, [stream]);
 
+  const handleInteraction = () => {
+    setShowControls(prev => !prev);
+    if (!showControls) {
+        setTimeout(() => {
+            if (!showAdminMenu) setShowControls(false);
+        }, 3000);
+    }
+  };
+
   return (
-    <div className={`relative w-full h-full bg-[#3c4043] rounded-xl overflow-hidden shadow-lg border transition-all duration-300 group ${isPinned ? 'border-[#8ab4f8] shadow-blue-500/20' : 'border-[#5f6368]'}`}>
+    <div 
+        className={`relative w-full h-full bg-[#3c4043] rounded-xl overflow-hidden shadow-lg border transition-all duration-300 group ${isPinned ? 'border-[#8ab4f8] shadow-blue-500/20' : 'border-[#5f6368]'}`}
+        onClick={handleInteraction}
+        onMouseEnter={() => setShowControls(true)}
+        onMouseLeave={() => { if(!showAdminMenu) setShowControls(false); }}
+    >
       
       {/* Video / Content Layer */}
       {stream && isCamOn && !isAi ? (
         <video
           ref={videoRef}
           autoPlay
-          muted={isSelf} // Mute self locally
+          muted={isSelf}
           playsInline
-          className={`w-full h-full object-cover ${isSelf ? 'scale-x-[-1]' : ''}`}
+          className={`w-full h-full object-cover ${isSelf && !participant.isPinned ? 'scale-x-[-1]' : ''}`}
         />
       ) : (
         /* Avatar / AI Visualizer */
@@ -54,7 +76,7 @@ export const ParticipantTile: React.FC<ParticipantTileProps> = ({
              </div>
            ) : (
              <div 
-                className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-semibold text-white shadow-lg"
+                className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-semibold text-white shadow-lg select-none"
                 style={{ backgroundColor: avatarColor || '#5f6368' }}
              >
                 {name.charAt(0).toUpperCase()}
@@ -70,88 +92,125 @@ export const ParticipantTile: React.FC<ParticipantTileProps> = ({
           </div>
       )}
 
-      {/* Name Tag & Role Badge */}
-      <div className="absolute bottom-4 left-4 bg-black/40 px-3 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-2 backdrop-blur-md border border-white/5 z-20 transition-all duration-300">
-        <span className="truncate max-w-[140px] drop-shadow-sm">{name} {isSelf && "(You)"}</span>
+      {/* Name Tag & Badges */}
+      <div className={`absolute bottom-4 left-4 right-14 bg-black/40 px-3 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-2 backdrop-blur-md border border-white/5 z-20 transition-all duration-300 ${showControls ? 'opacity-0' : 'opacity-100'}`}>
+        <span className="truncate drop-shadow-sm">{name} {isSelf && "(You)"}</span>
         
         {role === 'host' && (
-            <div className="flex items-center justify-center bg-blue-500/20 p-1 rounded-full" title="Meeting Host">
-                <Shield size={14} className="text-blue-400" fill="currentColor" />
+            <div className="flex items-center justify-center bg-blue-500/20 p-1 rounded-full shrink-0" title="Meeting Host">
+                <Shield size={12} className="text-blue-400" fill="currentColor" />
             </div>
         )}
         
         {isAi && (
-            <div className="flex items-center justify-center bg-purple-500/20 p-1 rounded-full animate-pulse" title="AI Professor">
-                <Sparkles size={14} className="text-purple-300" fill="currentColor" />
+            <div className="flex items-center justify-center bg-purple-500/20 p-1 rounded-full shrink-0 animate-pulse" title="AI Professor">
+                <Sparkles size={12} className="text-purple-300" fill="currentColor" />
+            </div>
+        )}
+
+        {/* Connection Quality */}
+        {!isAi && connectionQuality && (
+            <div className="ml-auto" title={`Connection: ${connectionQuality}`}>
+                <Wifi size={14} className={`${connectionQuality === 'good' ? 'text-green-400' : connectionQuality === 'fair' ? 'text-yellow-400' : 'text-red-400'}`} />
             </div>
         )}
       </div>
 
-      {/* Hand Raised Indicator (Top Left) */}
-      {isHandRaised && (
-          <div className="absolute top-4 left-4 bg-[#fbbc04] text-[#202124] p-2 rounded-full shadow-md z-20 animate-pulse">
-              <Hand size={20} />
-          </div>
-      )}
+      {/* Top Indicators */}
+      <div className="absolute top-4 left-4 flex flex-col gap-2 z-20">
+          {isHandRaised && (
+              <div className="bg-[#fbbc04] text-[#202124] p-2 rounded-full shadow-md animate-pulse">
+                  <Hand size={20} />
+              </div>
+          )}
+          {isPinned && !isFullscreen && (
+              <div className="bg-[#8ab4f8] text-[#202124] p-1.5 rounded-full shadow-md">
+                  <Pin size={14} fill="currentColor" />
+              </div>
+          )}
+      </div>
 
-      {/* Pinned Indicator (Top Left, under hand if exists) */}
-      {isPinned && (
-          <div className={`absolute left-4 bg-[#8ab4f8] text-[#202124] p-1.5 rounded-full shadow-md z-20 ${isHandRaised ? 'top-16' : 'top-4'}`}>
-              <Pin size={14} fill="currentColor" />
-          </div>
-      )}
+      {/* Top Right Indicators */}
+      <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
+          {(isMuted && !isAi) && (
+            <div className="bg-[#ea4335] p-2 rounded-full shadow-md border border-white/10">
+               <MicOff size={16} className="text-white" />
+            </div>
+          )}
+           {!isSelf && permissions?.canDraw && (
+            <div className="bg-green-600/80 p-1.5 rounded-full shadow-md" title="Can Draw">
+                <PenTool size={12} className="text-white" />
+            </div>
+           )}
+      </div>
 
-      {/* Mute Indicator (Top Right) */}
-      {(isMuted && !isAi) && (
-        <div className="absolute top-4 right-4 bg-[#ea4335] p-2 rounded-full shadow-md z-10 border border-white/10">
-           <MicOff size={16} className="text-white" />
-        </div>
-      )}
-
-      {/* Admin Controls Overlay (Hover) */}
+      {/* Controls Overlay */}
       {!isAi && (
-        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center gap-4 backdrop-blur-sm z-30">
-            {/* Pin Button (Everyone) */}
+        <div className={`absolute inset-0 bg-black/60 transition-opacity duration-200 flex items-center justify-center gap-2 md:gap-4 backdrop-blur-[2px] z-30 ${showControls || showAdminMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
              <button 
-                onClick={() => onTogglePin?.(participant.id)}
-                className="p-4 rounded-full bg-[#3c4043] hover:bg-[#5f6368] text-white transition-all transform hover:scale-110 shadow-lg border border-gray-500"
+                onClick={(e) => { e.stopPropagation(); onTogglePin?.(participant.id); }}
+                className="p-3 md:p-4 rounded-full bg-[#3c4043] hover:bg-[#5f6368] text-white transition-all transform active:scale-95 shadow-lg border border-gray-500"
                 title={isPinned ? "Unpin" : "Pin participant"}
             >
-                {isPinned ? <PinOff size={24} /> : <Pin size={24} />}
+                {isPinned ? <PinOff size={20} /> : <Pin size={20} />}
+            </button>
+
+            <button 
+                onClick={(e) => { e.stopPropagation(); onToggleFullscreen?.(participant.id); }}
+                className="p-3 md:p-4 rounded-full bg-[#3c4043] hover:bg-[#5f6368] text-white transition-all transform active:scale-95 shadow-lg border border-gray-500"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            >
+                {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
 
             {isAdminView && !isSelf && (
-                <>
+                <div className="relative">
                     <button 
-                        onClick={() => onToggleMuteParticipant?.(participant.id)}
-                        className={`p-4 rounded-full transition-all transform hover:scale-110 shadow-lg border ${
-                            isMuted 
-                            ? 'bg-[#34a853] hover:bg-[#34a853]/90 border-transparent text-white' // Green for Unmute
-                            : 'bg-[#ea4335] hover:bg-[#d93025] border-red-400 text-white' // Red for Mute
-                        }`}
-                        title={isMuted ? "Unmute participant" : "Mute participant"}
+                        onClick={(e) => { e.stopPropagation(); setShowAdminMenu(!showAdminMenu); }}
+                        className="p-3 md:p-4 rounded-full bg-[#8ab4f8] hover:bg-[#aecbfa] text-[#202124] transition-all transform active:scale-95 shadow-lg border border-transparent"
+                        title="Admin Controls"
                     >
-                        {isMuted ? <Mic size={24} /> : <MicOff size={24} />}
+                        <MoreVertical size={20} />
                     </button>
-                    <button 
-                        onClick={() => onToggleCamParticipant?.(participant.id)}
-                        className={`p-4 rounded-full transition-all transform hover:scale-110 shadow-lg border ${
-                            isCamOn 
-                            ? 'bg-[#34a853] hover:bg-[#34a853]/90 border-transparent text-white' 
-                            : 'bg-[#ea4335] hover:bg-[#d93025] border-red-400 text-white' 
-                        }`}
-                        title={isCamOn ? "Turn off camera" : "Turn on camera"}
-                    >
-                        {isCamOn ? <Video size={24} /> : <VideoOff size={24} />}
-                    </button>
-                    <button 
-                        onClick={() => onRemoveParticipant?.(participant.id)}
-                        className="p-4 rounded-full bg-[#3c4043] hover:bg-[#5f6368] text-white transition-all transform hover:scale-110 shadow-lg border border-gray-500"
-                        title="Remove from class"
-                    >
-                        <LogOut size={24} />
-                    </button>
-                </>
+                    
+                    {/* Admin Dropdown */}
+                    {showAdminMenu && (
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-[#303134] border border-[#5f6368] rounded-lg shadow-xl overflow-hidden animate-fadeIn flex flex-col z-50">
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); onToggleMuteParticipant?.(participant.id); setShowAdminMenu(false); }}
+                                className="px-4 py-3 text-left text-sm text-white hover:bg-[#3c4043] flex items-center gap-2"
+                             >
+                                 {isMuted ? <Mic size={16} className="text-green-400" /> : <MicOff size={16} className="text-red-400" />}
+                                 {isMuted ? "Unmute Audio" : "Mute Audio"}
+                             </button>
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); onToggleCamParticipant?.(participant.id); setShowAdminMenu(false); }}
+                                className="px-4 py-3 text-left text-sm text-white hover:bg-[#3c4043] flex items-center gap-2"
+                             >
+                                 {isCamOn ? <VideoOff size={16} className="text-red-400" /> : <Video size={16} className="text-green-400" />}
+                                 {isCamOn ? "Stop Video" : "Ask to Start Video"}
+                             </button>
+                             <div className="h-px bg-[#5f6368] my-1"></div>
+                             
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); onUpdatePermissions?.(participant.id, { canDraw: !permissions?.canDraw }); }}
+                                className="px-4 py-3 text-left text-sm text-white hover:bg-[#3c4043] flex items-center gap-2"
+                             >
+                                 <PenTool size={16} className={permissions?.canDraw ? "text-green-400" : "text-gray-400"} />
+                                 {permissions?.canDraw ? "Revoke Draw" : "Allow Draw"}
+                             </button>
+                             
+                             <div className="h-px bg-[#5f6368] my-1"></div>
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); onRemoveParticipant?.(participant.id); setShowAdminMenu(false); }}
+                                className="px-4 py-3 text-left text-sm text-red-400 hover:bg-[#3c4043] flex items-center gap-2"
+                             >
+                                 <LogOut size={16} />
+                                 Remove User
+                             </button>
+                        </div>
+                    )}
+                </div>
             )}
         </div>
       )}

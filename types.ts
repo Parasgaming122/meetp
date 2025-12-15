@@ -23,6 +23,16 @@ export enum ActiveTool {
   SCREEN_SHARE = 'SCREEN_SHARE',
 }
 
+export enum LayoutMode {
+  GALLERY = 'GALLERY',
+  SPEAKER = 'SPEAKER',
+}
+
+export interface ParticipantPermissions {
+  canDraw: boolean;
+  canShareScreen: boolean;
+}
+
 export interface Participant {
   id: string;
   name: string;
@@ -36,4 +46,6 @@ export interface Participant {
   isHandRaised?: boolean;
   isPinned?: boolean;
   reaction?: string; // Emoji character
+  permissions?: ParticipantPermissions;
+  connectionQuality?: 'good' | 'fair' | 'poor';
 }

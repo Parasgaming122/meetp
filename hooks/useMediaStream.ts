@@ -8,14 +8,22 @@ export function useMediaStream() {
 
   const initializeStream = useCallback(async () => {
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 }, // HD preference
+      const constraints = {
+        video: {
+          width: { ideal: 1920 }, // Attempt 1080p
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+          facingMode: "user" // Default to front camera on mobile
+        },
         audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000
         }
-      });
+      };
+      
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(newStream);
       setError(null);
     } catch (err: any) {

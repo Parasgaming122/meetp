@@ -92,8 +92,7 @@ export class GeminiLiveService {
     // Wait for session to be ready before streaming
     if (!this.sessionPromise) return;
 
-    // Use a separate input context for 16kHz requirement if needed, or just downsample.
-    // The Live API docs example uses a 16kHz context for input.
+    // Use a separate input context for 16kHz requirement
     const inputContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     
     this.inputSource = inputContext.createMediaStreamSource(stream);
@@ -171,12 +170,6 @@ export class GeminiLiveService {
       this.audioContext = null;
     }
 
-    if (this.sessionPromise) {
-       // We can't easily cancel the promise or close connection without the session object exposed properly 
-       // but typically closing the window or dropping references works. 
-       // We'll rely on reloading or React unmount to clean up thoroughly.
-    }
-
     this.onStatus?.(ConnectionState.DISCONNECTED);
   }
 
@@ -196,10 +189,6 @@ export class GeminiLiveService {
         this.onText?.(message.serverContent.inputTranscription.text, true, false);
     }
     
-    if (message.serverContent?.turnComplete) {
-       // Could mark text as final here
-    }
-
     // 2. Handle Audio Output
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio) {
@@ -223,8 +212,16 @@ export class GeminiLiveService {
         const audioBytes = base64ToBytes(base64Audio);
         const audioBuffer = await decodeAudioData(audioBytes, this.audioContext);
         
-        // Update timing
-        this.nextStartTime = Math.max(this.nextStartTime, this.audioContext.currentTime);
+        // Time drift correction
+        // If the scheduled time is in the past, reset it to now to avoid silence/delay accumulation
+        if (this.nextStartTime < this.audioContext.currentTime) {
+            this.nextStartTime = this.audioContext.currentTime;
+        }
+
+        // Add a tiny buffer (10ms) to ensure smooth stitching if we are very close to now
+        if (this.nextStartTime < this.audioContext.currentTime + 0.01) {
+            this.nextStartTime = this.audioContext.currentTime + 0.01;
+        }
         
         const source = this.audioContext.createBufferSource();
         source.buffer = audioBuffer;
@@ -233,27 +230,31 @@ export class GeminiLiveService {
         source.start(this.nextStartTime);
         this.activeSources.add(source);
 
-        // Calculate simple volume for visualizer
+        // Calculate volume for visualizer
         const analyser = this.audioContext.createAnalyser();
         analyser.fftSize = 32;
         source.connect(analyser);
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         
-        // Quick loop to update volume while playing
+        const endTime = this.nextStartTime + audioBuffer.duration;
+        
         const checkVolume = () => {
+             if (!this.audioContext) return;
+             if (this.audioContext.currentTime >= endTime) {
+                 this.onVolume?.(0);
+                 return;
+             }
              analyser.getByteFrequencyData(dataArray);
              let sum = 0;
              for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
              const avg = sum / dataArray.length;
              this.onVolume?.(avg / 255);
-             if (this.audioContext && this.audioContext.currentTime < endTime) {
-                 requestAnimationFrame(checkVolume);
-             } else {
-                 this.onVolume?.(0);
-             }
+             requestAnimationFrame(checkVolume);
         };
-        const endTime = this.nextStartTime + audioBuffer.duration;
-        checkVolume();
+        
+        // Start checking volume when audio starts
+        const timeUntilStart = (this.nextStartTime - this.audioContext.currentTime) * 1000;
+        setTimeout(checkVolume, Math.max(0, timeUntilStart));
 
         source.onended = () => {
           this.activeSources.delete(source);
