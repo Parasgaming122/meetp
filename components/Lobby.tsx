@@ -27,6 +27,15 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
     setGeneratedRoomId(generateRoomId());
   }, []);
 
+  // Auto-disable AI if key is needed but not present
+  useEffect(() => {
+    if (needsApiKey && !apiKeyInput.trim()) {
+        setAiEnabled(false);
+    } else if (needsApiKey && apiKeyInput.trim()) {
+        setAiEnabled(true);
+    }
+  }, [apiKeyInput, needsApiKey]);
+
   useEffect(() => {
     const startStream = async () => {
       try {
@@ -63,12 +72,11 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
   const validateAndJoin = (id: string, admin: boolean) => {
       if (!name) return;
       
-      if (needsApiKey && !apiKeyInput.trim()) {
-          alert("Please enter a Google Gemini API Key to continue.");
-          return;
-      }
+      // If we need a key, and user provided one, use it. 
+      // If empty, we proceed but AI will be disabled via the aiEnabled flag logic (or just missing key downstream).
+      const finalAiEnabled = needsApiKey && !apiKeyInput.trim() ? false : aiEnabled;
 
-      onJoin(name, id, admin, aiEnabled, apiKeyInput);
+      onJoin(name, id, admin, finalAiEnabled, apiKeyInput);
   };
 
   return (
@@ -101,12 +109,12 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
                  {needsApiKey && (
                      <div className="space-y-2 animate-fadeIn">
                         <label className="text-sm font-medium text-gray-300 ml-1 flex justify-between items-center">
-                            <span className="flex items-center gap-1"><Key size={14} /> Gemini API Key</span>
+                            <span className="flex items-center gap-1"><Key size={14} /> Gemini API Key <span className="text-gray-500 font-normal ml-1">(Optional)</span></span>
                             <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-[#8ab4f8] hover:underline">Get Key</a>
                         </label>
                         <input 
                             type="password" 
-                            placeholder="Enter Gemini API Key" 
+                            placeholder="Enter Key for AI Features" 
                             value={apiKeyInput}
                             onChange={(e) => setApiKeyInput(e.target.value)}
                             className="w-full bg-[#3c4043] border border-transparent focus:border-[#8ab4f8] rounded-lg px-4 py-3 text-white text-lg placeholder-gray-500 outline-none transition-all shadow-sm font-mono tracking-wider"
@@ -146,7 +154,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
                              </div>
                              
                              {/* AI Toggle */}
-                             <label className="flex items-center justify-between p-3 bg-[#303134] rounded-lg border border-[#5f6368] cursor-pointer hover:bg-[#3c4043] transition-colors">
+                             <label className={`flex items-center justify-between p-3 bg-[#303134] rounded-lg border border-[#5f6368] cursor-pointer transition-colors ${(!apiKeyInput && needsApiKey) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#3c4043]'}`}>
                                 <div className="flex items-center gap-3">
                                     <Sparkles className={aiEnabled ? "text-[#fbbc04]" : "text-gray-500"} size={20} />
                                     <span className="font-medium">Enable AI Professor</span>
@@ -154,12 +162,18 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
                                 <div className={`w-10 h-5 rounded-full relative transition-colors ${aiEnabled ? 'bg-[#8ab4f8]' : 'bg-[#5f6368]'}`}>
                                     <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${aiEnabled ? 'translate-x-5' : 'translate-x-0'}`}></div>
                                 </div>
-                                <input type="checkbox" className="hidden" checked={aiEnabled} onChange={e => setAiEnabled(e.target.checked)} />
+                                <input 
+                                    type="checkbox" 
+                                    className="hidden" 
+                                    checked={aiEnabled} 
+                                    disabled={needsApiKey && !apiKeyInput}
+                                    onChange={e => setAiEnabled(e.target.checked)} 
+                                />
                              </label>
 
                              <button 
                                 onClick={() => validateAndJoin(generatedRoomId, true)}
-                                disabled={!name || (needsApiKey && !apiKeyInput)}
+                                disabled={!name}
                                 className="w-full bg-[#8ab4f8] text-[#202124] hover:bg-[#aecbfa] disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors text-lg"
                              >
                                 <VideoIcon size={20} />
@@ -180,7 +194,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onJoin, needsApiKey, savedApiKey }
                             </div>
                             <button 
                                 onClick={() => validateAndJoin(roomId, false)}
-                                disabled={!name || !roomId || (needsApiKey && !apiKeyInput)}
+                                disabled={!name || !roomId}
                                 className="w-full bg-[#8ab4f8] text-[#202124] hover:bg-[#aecbfa] disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 rounded-lg transition-colors text-lg"
                             >
                                 Join Now

@@ -27,7 +27,8 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
   const [activeTool, setActiveTool] = useState<ActiveTool>(ActiveTool.NONE);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAIActive, setIsAIActive] = useState(initialAIEnabled);
+  // Force AI to false if no key is available
+  const [isAIActive, setIsAIActive] = useState(initialAIEnabled && !!apiKey);
   const [isRecording, setIsRecording] = useState(false);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(LayoutMode.GALLERY);
   
@@ -392,7 +393,13 @@ export const Classroom: React.FC<ClassroomProps> = ({ apiKey, userName, roomId, 
         )}
 
         {/* Modals */}
-        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} isAIEnabled={isAIActive} onToggleAI={setIsAIActive} />
+        <SettingsModal 
+            isOpen={isSettingsOpen} 
+            onClose={() => setIsSettingsOpen(false)} 
+            isAIEnabled={isAIActive} 
+            onToggleAI={setIsAIActive} 
+            hasApiKey={!!apiKey}
+        />
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col md:flex-row gap-4 p-2 md:p-4 min-h-0 relative">

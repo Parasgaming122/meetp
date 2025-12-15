@@ -6,13 +6,15 @@ interface SettingsModalProps {
   onClose: () => void;
   isAIEnabled: boolean;
   onToggleAI: (enabled: boolean) => void;
+  hasApiKey: boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ 
   isOpen, 
   onClose, 
   isAIEnabled, 
-  onToggleAI 
+  onToggleAI,
+  hasApiKey
 }) => {
   if (!isOpen) return null;
 
@@ -41,20 +43,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </p>
                 </div>
                 
-                <label className="relative inline-flex items-center cursor-pointer mt-1">
+                <label className={`relative inline-flex items-center cursor-pointer mt-1 ${!hasApiKey ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     <input 
                         type="checkbox" 
                         className="sr-only peer" 
                         checked={isAIEnabled}
-                        onChange={(e) => onToggleAI(e.target.checked)}
+                        onChange={(e) => hasApiKey && onToggleAI(e.target.checked)}
+                        disabled={!hasApiKey}
                     />
                     <div className="w-11 h-6 bg-[#5f6368] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#8ab4f8]"></div>
                 </label>
             </div>
 
-            {!isAIEnabled && (
-                <div className="bg-[#ea4335]/10 border border-[#ea4335]/30 rounded-lg p-3 text-sm text-[#ea4335]">
-                    Disabling AI features will remove the AI Professor from the call and disable smart whiteboard queries.
+            {hasApiKey ? (
+                !isAIEnabled && (
+                    <div className="bg-[#ea4335]/10 border border-[#ea4335]/30 rounded-lg p-3 text-sm text-[#ea4335]">
+                        Disabling AI features will remove the AI Professor from the call and disable smart whiteboard queries.
+                    </div>
+                )
+            ) : (
+                <div className="bg-[#fbbc04]/10 border border-[#fbbc04]/30 rounded-lg p-3 text-sm text-[#fbbc04]">
+                    AI features are unavailable because no API Key was provided when joining. Reload to add a key.
                 </div>
             )}
         </div>
